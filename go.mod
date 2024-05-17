@@ -1,5 +1,3 @@
-module golang.org/x/term
+module zgo.at/term
 
 go 1.18
-
-require golang.org/x/sys v0.20.0

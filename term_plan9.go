@@ -7,14 +7,12 @@ package term
 import (
 	"fmt"
 	"runtime"
-
-	"golang.org/x/sys/plan9"
 )
 
 type state struct{}
 
 func isTerminal(fd int) bool {
-	path, err := plan9.Fd2path(fd)
+	path, err := syscall.Fd2path(fd)
 	if err != nil {
 		return false
 	}

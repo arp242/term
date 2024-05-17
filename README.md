@@ -1,19 +1,13 @@
-# Go terminal/console support
+This is a fork of golang.org/x/term, but without a dependency on
+golang.org/x/sys, using the stdlib syscall package instead.
 
-[![Go Reference](https://pkg.go.dev/badge/golang.org/x/term.svg)](https://pkg.go.dev/golang.org/x/term)
+This is useful in some cases because x/sys is rather large (~11M) and often you
+just want a quick check to get the terminal width, or something like that. If
+you're already using x/sys that's fine, but often you're not, and it's the only
+dependency.
 
-This repository provides Go terminal and console support packages.
+This can also be easily copy/pasted in internal, for dependency-free term
+operations.
 
-## Download/Install
-
-The easiest way to install is to run `go get -u golang.org/x/term`. You can
-also manually git clone the repository to `$GOPATH/src/golang.org/x/term`.
-
-## Report Issues / Send Patches
-
-This repository uses Gerrit for code changes. To learn how to submit changes to
-this repository, see https://golang.org/doc/contribute.html.
-
-The main issue tracker for the term repository is located at
-https://github.com/golang/go/issues. Prefix your issue with "x/term:" in the
-subject line, so it is easy to find.
+Main downside is that syscall isn't really maintained and new platforms may be
+slower to get support. None of this is cutting edge stuff, so should be fine.

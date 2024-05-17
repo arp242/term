@@ -6,7 +6,7 @@
 
 package term
 
-import "golang.org/x/sys/unix"
+import "syscall"
 
-const ioctlReadTermios = unix.TCGETS
-const ioctlWriteTermios = unix.TCSETS
+const ioctlReadTermios = syscall.TCGETS
+const ioctlWriteTermios = syscall.TCSETS

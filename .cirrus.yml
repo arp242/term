@@ -1,0 +1,9 @@
+freebsd_task:
+  name: 'FreeBSD'
+  freebsd_instance:
+    image_family: freebsd-13-2
+  install_script:
+    - pkg update -f
+    - pkg install -y go
+  test_script:
+    - go test ./...

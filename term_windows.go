@@ -6,9 +6,68 @@ package term
 
 import (
 	"os"
-
-	"golang.org/x/sys/windows"
+	"syscall"
+	"unsafe"
 )
+
+// Console related constants used for the mode parameter to SetConsoleMode. See
+// https://docs.microsoft.com/en-us/windows/console/setconsolemode for details.
+
+const (
+	ENABLE_PROCESSED_INPUT        = 0x1
+	ENABLE_LINE_INPUT             = 0x2
+	ENABLE_ECHO_INPUT             = 0x4
+	ENABLE_WINDOW_INPUT           = 0x8
+	ENABLE_MOUSE_INPUT            = 0x10
+	ENABLE_INSERT_MODE            = 0x20
+	ENABLE_QUICK_EDIT_MODE        = 0x40
+	ENABLE_EXTENDED_FLAGS         = 0x80
+	ENABLE_AUTO_POSITION          = 0x100
+	ENABLE_VIRTUAL_TERMINAL_INPUT = 0x200
+
+	ENABLE_PROCESSED_OUTPUT            = 0x1
+	ENABLE_WRAP_AT_EOL_OUTPUT          = 0x2
+	ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x4
+	DISABLE_NEWLINE_AUTO_RETURN        = 0x8
+	ENABLE_LVB_GRID_WORLDWIDE          = 0x10
+)
+
+var (
+	modkernel32                    = syscall.NewLazyDLL("kernel32.dll")
+	procSetConsoleMode             = modkernel32.NewProc("SetConsoleMode")
+	procGetConsoleScreenBufferInfo = modkernel32.NewProc("GetConsoleScreenBufferInfo")
+)
+
+func setConsoleMode(console syscall.Handle, mode uint32) (err error) {
+	r1, _, e1 := syscall.Syscall(procSetConsoleMode.Addr(), 2, uintptr(console), uintptr(mode), 0)
+	if r1 == 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+// Used with GetConsoleScreenBuffer to retrieve information about a console
+// screen buffer. See
+// https://docs.microsoft.com/en-us/windows/console/console-screen-buffer-info-str
+// for details.
+
+type consoleScreenBufferInfo struct {
+	Size              Coord
+	CursorPosition    Coord
+	Attributes        uint16
+	Window            SmallRect
+	MaximumWindowSize Coord
+}
+
+func getConsoleScreenBufferInfo(console syscall.Handle, info *consoleScreenBufferInfo) (err error) {
+	r1, _, e1 := syscall.Syscall(procGetConsoleScreenBufferInfo.Addr(), 2, uintptr(console), uintptr(unsafe.Pointer(info)), 0)
+	if r1 == 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+// ---
 
 type state struct {
 	mode uint32
@@ -16,17 +75,17 @@ type state struct {
 
 func isTerminal(fd int) bool {
 	var st uint32
-	err := windows.GetConsoleMode(windows.Handle(fd), &st)
+	err := syscall.GetConsoleMode(syscall.Handle(fd), &st)
 	return err == nil
 }
 
 func makeRaw(fd int) (*State, error) {
 	var st uint32
-	if err := windows.GetConsoleMode(windows.Handle(fd), &st); err != nil {
+	if err := syscall.GetConsoleMode(syscall.Handle(fd), &st); err != nil {
 		return nil, err
 	}
-	raw := st &^ (windows.ENABLE_ECHO_INPUT | windows.ENABLE_PROCESSED_INPUT | windows.ENABLE_LINE_INPUT | windows.ENABLE_PROCESSED_OUTPUT)
-	if err := windows.SetConsoleMode(windows.Handle(fd), raw); err != nil {
+	raw := st &^ (ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_OUTPUT)
+	if err := setConsoleMode(syscall.Handle(fd), raw); err != nil {
 		return nil, err
 	}
 	return &State{state{st}}, nil
@@ -34,19 +93,19 @@ func makeRaw(fd int) (*State, error) {
 
 func getState(fd int) (*State, error) {
 	var st uint32
-	if err := windows.GetConsoleMode(windows.Handle(fd), &st); err != nil {
+	if err := syscall.GetConsoleMode(syscall.Handle(fd), &st); err != nil {
 		return nil, err
 	}
 	return &State{state{st}}, nil
 }
 
 func restore(fd int, state *State) error {
-	return windows.SetConsoleMode(windows.Handle(fd), state.mode)
+	return setConsoleMode(syscall.Handle(fd), state.mode)
 }
 
 func getSize(fd int) (width, height int, err error) {
-	var info windows.ConsoleScreenBufferInfo
-	if err := windows.GetConsoleScreenBufferInfo(windows.Handle(fd), &info); err != nil {
+	var info consoleScreenBufferInfo
+	if err := getConsoleScreenBufferInfo(syscall.Handle(fd), &info); err != nil {
 		return 0, 0, err
 	}
 	return int(info.Window.Right - info.Window.Left + 1), int(info.Window.Bottom - info.Window.Top + 1), nil
@@ -54,22 +113,22 @@ func getSize(fd int) (width, height int, err error) {
 
 func readPassword(fd int) ([]byte, error) {
 	var st uint32
-	if err := windows.GetConsoleMode(windows.Handle(fd), &st); err != nil {
+	if err := syscall.GetConsoleMode(syscall.Handle(fd), &st); err != nil {
 		return nil, err
 	}
 	old := st
 
-	st &^= (windows.ENABLE_ECHO_INPUT | windows.ENABLE_LINE_INPUT)
-	st |= (windows.ENABLE_PROCESSED_OUTPUT | windows.ENABLE_PROCESSED_INPUT)
-	if err := windows.SetConsoleMode(windows.Handle(fd), st); err != nil {
+	st &^= (ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT)
+	st |= (ENABLE_PROCESSED_OUTPUT | ENABLE_PROCESSED_INPUT)
+	if err := setConsoleMode(syscall.Handle(fd), st); err != nil {
 		return nil, err
 	}
 
-	defer windows.SetConsoleMode(windows.Handle(fd), old)
+	defer setConsoleMode(syscall.Handle(fd), old)
 
-	var h windows.Handle
-	p, _ := windows.GetCurrentProcess()
-	if err := windows.DuplicateHandle(p, windows.Handle(fd), p, &h, 0, false, windows.DUPLICATE_SAME_ACCESS); err != nil {
+	var h syscall.Handle
+	p, _ := syscall.GetCurrentProcess()
+	if err := syscall.DuplicateHandle(p, syscall.Handle(fd), p, &h, 0, false, syscall.DUPLICATE_SAME_ACCESS); err != nil {
 		return nil, err
 	}
 
