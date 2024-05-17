@@ -51,12 +51,14 @@ func setConsoleMode(console syscall.Handle, mode uint32) (err error) {
 // https://docs.microsoft.com/en-us/windows/console/console-screen-buffer-info-str
 // for details.
 
+type coord struct{ X, Y int16 }
+type smallRect struct{ Left, Top, Right, Bottom int16 }
 type consoleScreenBufferInfo struct {
-	Size              Coord
-	CursorPosition    Coord
+	Size              coord
+	CursorPosition    coord
 	Attributes        uint16
-	Window            SmallRect
-	MaximumWindowSize Coord
+	Window            smallRect
+	MaximumWindowSize coord
 }
 
 func getConsoleScreenBufferInfo(console syscall.Handle, info *consoleScreenBufferInfo) (err error) {
@@ -65,6 +67,32 @@ func getConsoleScreenBufferInfo(console syscall.Handle, info *consoleScreenBuffe
 		err = errnoErr(e1)
 	}
 	return
+}
+
+// Do the interface allocations only once for common
+// Errno values.
+const (
+	errnoERROR_IO_PENDING = 997
+)
+
+var (
+	errERROR_IO_PENDING error = syscall.Errno(errnoERROR_IO_PENDING)
+	errERROR_EINVAL     error = syscall.EINVAL
+)
+
+// errnoErr returns common boxed Errno values, to prevent
+// allocations at runtime.
+func errnoErr(e syscall.Errno) error {
+	switch e {
+	case 0:
+		return errERROR_EINVAL
+	case errnoERROR_IO_PENDING:
+		return errERROR_IO_PENDING
+	}
+	// TODO: add more here, after collecting data on the common
+	// error values see on Windows. (perhaps when running
+	// all.bat?)
+	return e
 }
 
 // ---
