@@ -26,6 +26,7 @@ jobs:
             export GOARCH=${a#*/}
 
             case "$GOOS" in
+              (aix)          exit 0 ;; # Can't test it; IBM won't provide anything for open source. Fuck 'em.
               (android|ios)  exit 0 ;; # Doesn't cross-compile.
             esac
 
